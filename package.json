@@ -1,0 +1,46 @@
+{
+  "name": "wity-cli",
+  "version": "0.1.0",
+  "description": "Command-line tool for Wity, the typed-decision API",
+  "homepage": "https://wity.alphanimble.com",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "wity": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "npm run --silent build && node dist/cli.mjs",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm audit --omit=dev"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@napi-rs/keyring": "^2.1.0",
+    "commander": "^15.0.0",
+    "ink": "^7.1.1",
+    "react": "^19.3.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "wity": "file:../wity-sdk-ts",
+    "@biomejs/biome": "^2.5.14",
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
+    "ink-testing-library": "^4.0.0",
+    "tsdown": "^0.23.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  }
+}
