@@ -107,7 +107,7 @@ describe("playground", () => {
   it("shows the request as code with ctrl+t, without sending it", async () => {
     const { type, waitFor, app } = open("Hello");
     await type(..."Is it spam?".split(""), KEYS.ctrlT);
-    await waitFor('import { WityClient, noul } from "wity";');
+    await waitFor('import { WityClient, noul } from "wity-sdk";');
     await waitFor('noul("Is it spam?")');
     expect(wity.seen).toHaveLength(0);
     app.unmount();

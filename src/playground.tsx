@@ -3,7 +3,7 @@
 
 import { Box, render, Text, useAnimation, useApp, useInput, usePaste, useWindowSize } from "ink";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { Reasoning, SystemOneRequest, SystemOneResponse } from "wity";
+import type { Reasoning, SystemOneRequest, SystemOneResponse } from "wity-sdk";
 import { explain, makeClient } from "./api.ts";
 import { systemOneTs } from "./code.ts";
 import { choiceQuestion, noulQuestion, scoreQuestion } from "./commands/questions.ts";
@@ -305,7 +305,7 @@ export function Playground(props: { ctx: Ctx; found: FoundKey; initialText: stri
       <Box flexDirection="column" marginTop={1}>
         {code !== undefined ? (
           <Box borderStyle="round" borderDimColor paddingX={1} flexDirection="column">
-            <Text dimColor>TypeScript · npm install wity</Text>
+            <Text dimColor>TypeScript · npm install wity-sdk</Text>
             <Text>{code}</Text>
           </Box>
         ) : status.kind === "running" ? (

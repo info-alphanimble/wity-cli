@@ -9,7 +9,7 @@
 import type { Readable, Writable } from "node:stream";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { GenerateRequest, Reasoning, SystemOneRequest, SystemOneResponse } from "wity";
+import type { GenerateRequest, Reasoning, SystemOneRequest, SystemOneResponse } from "wity-sdk";
 import { z } from "zod";
 import pkg from "../package.json" with { type: "json" };
 import { explain, makeClient } from "./api.ts";

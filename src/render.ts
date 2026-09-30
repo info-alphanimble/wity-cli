@@ -1,7 +1,7 @@
 // How answers look on a terminal.
 // Every string that came from the API or from a file goes through `clean` before it's printed.
 
-import type { ChoiceAnswer, NoulAnswer, ReasoningInfo, ScoreAnswer, SystemOneResponse } from "wity";
+import type { ChoiceAnswer, NoulAnswer, ReasoningInfo, ScoreAnswer, SystemOneResponse } from "wity-sdk";
 import { bar, clean, cost, decimal, ms, type Paint, pct, truncate } from "./output.ts";
 
 /** Choice answers with more options than this show the top ones, and say how many are hidden. */

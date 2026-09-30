@@ -1,7 +1,7 @@
 // wity ask <file>: several named questions about one text, in one call.
 
 import { readFile, stat } from "node:fs/promises";
-import type { Reasoning, SystemOneRequest } from "wity";
+import type { Reasoning, SystemOneRequest } from "wity-sdk";
 import { parse } from "yaml";
 import { codeLangs, curl, printCode, systemOneTs } from "../code.ts";
 import type { Ctx } from "../context.ts";

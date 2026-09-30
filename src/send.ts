@@ -1,6 +1,6 @@
 // Sending a request with the saved key: the spinner, the timing, and plain-English errors.
 
-import type { GenerateRequest, GenerateResponse, SystemOneRequest, SystemOneResponse } from "wity";
+import type { GenerateRequest, GenerateResponse, SystemOneRequest, SystemOneResponse } from "wity-sdk";
 import { explain, makeClient } from "./api.ts";
 import type { Ctx } from "./context.ts";
 import { type FoundKey, findKey } from "./credentials.ts";

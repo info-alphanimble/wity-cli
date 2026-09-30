@@ -8,6 +8,10 @@ cat email.txt | wity noul "Is this a phishing message?"
 
 Needs Node.js 22.13 or newer.
 
+```sh
+npm install -g wity-cli
+```
+
 ## API key
 
 ```sh

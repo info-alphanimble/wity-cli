@@ -1,6 +1,6 @@
 // wity api-key set, wity api-key show, wity api-key remove.
 
-import { DEFAULT_BASE_URL } from "wity";
+import { DEFAULT_BASE_URL } from "wity-sdk";
 import { checkKey, refusedHint } from "../api.ts";
 import { KEYS_PAGE } from "../config.ts";
 import type { Ctx } from "../context.ts";

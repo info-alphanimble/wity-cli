@@ -13,7 +13,7 @@ import {
   RateLimitError,
   WityClient,
   WityError,
-} from "wity";
+} from "wity-sdk";
 import { BILLING_PAGE } from "./config.ts";
 import type { FoundKey } from "./credentials.ts";
 import { CliError, EXIT } from "./exit.ts";

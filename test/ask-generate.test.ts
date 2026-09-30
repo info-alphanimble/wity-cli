@@ -175,7 +175,7 @@ describe("--code", () => {
       },
     );
     expect(res.code).toBe(EXIT.ok);
-    expect(res.stdout).toContain('import { WityClient, choice } from "wity";');
+    expect(res.stdout).toContain('import { WityClient, choice } from "wity-sdk";');
     expect(res.stdout).toContain('"tech support": "Bugs",');
     expect(res.stdout).toContain('state: "He said \\"hi\\"",');
     expect(res.stdout).toContain(`const client = new WityClient({ baseURL: "${wity.url}" });`);

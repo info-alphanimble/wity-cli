@@ -1,7 +1,7 @@
 // --code: the same request as TypeScript (with the SDK) and as curl, to copy into your own project.
 // The key is always $WITY_API_KEY in the output, never the real one.
 
-import { DEFAULT_BASE_URL, type GenerateRequest, type Question, type SystemOneRequest } from "wity";
+import { DEFAULT_BASE_URL, type GenerateRequest, type Question, type SystemOneRequest } from "wity-sdk";
 import type { Ctx } from "./context.ts";
 import { CliError, EXIT } from "./exit.ts";
 
@@ -57,7 +57,7 @@ export const systemOneTs = (request: SystemOneRequest, baseURL: string): string 
   const first = Object.entries(request.questions)[0];
   const field = first?.[1].type === "noul" ? "noul" : first?.[1].type === "choice" ? "choice" : "score";
   return [
-    `import { WityClient, ${types.join(", ")} } from "wity";`,
+    `import { WityClient, ${types.join(", ")} } from "wity-sdk";`,
     "",
     clientLine(baseURL),
     "",
@@ -81,7 +81,7 @@ export const generateTs = (request: GenerateRequest, baseURL: string): string =>
     request.max_tokens !== undefined && `  max_tokens: ${request.max_tokens},`,
   ].filter(Boolean);
   return [
-    `import { WityClient } from "wity";`,
+    `import { WityClient } from "wity-sdk";`,
     "",
     clientLine(baseURL),
     "",
@@ -122,7 +122,7 @@ export const printCode = (ctx: Ctx, langs: CodeLang[], ts: string, sh: string): 
     if (pretty) io.stdout.write(`\n  ${ctx.out("dim", title)}\n\n`);
     io.stdout.write(`${code}\n`);
   };
-  if (langs.includes("ts")) show("TypeScript · npm install wity", ts);
+  if (langs.includes("ts")) show("TypeScript · npm install wity-sdk", ts);
   if (langs.includes("curl")) show("curl", sh);
   if (pretty) io.stdout.write(`\n  ${ctx.out("dim", "Nothing was sent. Set WITY_API_KEY before running this.")}\n\n`);
 };

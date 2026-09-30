@@ -1,6 +1,6 @@
 // Where the CLI talks to.
 
-import { DEFAULT_BASE_URL } from "wity";
+import { DEFAULT_BASE_URL } from "wity-sdk";
 import { CliError, EXIT } from "./exit.ts";
 
 /** The website, where people sign in and manage keys. */

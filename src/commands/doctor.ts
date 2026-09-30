@@ -1,6 +1,6 @@
 // wity doctor: check everything the CLI needs, one line each.
 
-import { DEFAULT_BASE_URL } from "wity";
+import { DEFAULT_BASE_URL } from "wity-sdk";
 import { checkHealth, checkKey, refusedHint } from "../api.ts";
 import type { Ctx } from "../context.ts";
 import { type FoundKey, findKey, keyPrefix } from "../credentials.ts";

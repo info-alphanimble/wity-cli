@@ -10,7 +10,7 @@ import {
   type ScoreAnswer,
   type SystemOneRequest,
   score,
-} from "wity";
+} from "wity-sdk";
 import { codeLangs, curl, printCode, systemOneTs } from "../code.ts";
 import type { Ctx } from "../context.ts";
 import { CliError, EXIT, type ExitCode } from "../exit.ts";

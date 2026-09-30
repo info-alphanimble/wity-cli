@@ -1,6 +1,6 @@
 // wity generate: short text, or JSON in a shape you define.
 
-import type { GenerateRequest, GenerateResponse } from "wity";
+import type { GenerateRequest, GenerateResponse } from "wity-sdk";
 import { codeLangs, curl, generateTs, printCode } from "../code.ts";
 import type { Ctx } from "../context.ts";
 import { CliError, EXIT, type ExitCode } from "../exit.ts";
