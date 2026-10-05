@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { credentialsPath, findKey, keyPrefix, openStore } from "../src/credentials.ts";
+import { credentialsPath, findKey, keyPrefix, moveKey, openStore } from "../src/credentials.ts";
 import { CliError, EXIT } from "../src/exit.ts";
 import { GOOD_KEY, tempConfig } from "./helpers.ts";
 
@@ -112,6 +112,39 @@ describe("findKey", () => {
 
   it("rejects an unknown WITY_CREDENTIAL_STORE", async () => {
     await expect(openStore({ WITY_CREDENTIAL_STORE: "cloud" })).rejects.toThrow(/auto, keychain or file/);
+  });
+});
+
+describe("moveKey", () => {
+  it("moves a key to a new address and removes the old entry", async () => {
+    const env = tempConfig();
+    const store = await openStore(env);
+    await store.set(saved(GOOD_KEY, A));
+
+    expect(await moveKey(store, A, B)).toBe(true);
+    expect(await store.get(B)).toEqual(saved(GOOD_KEY, B));
+    expect(await store.get(A)).toBeUndefined();
+    expect(await moveKey(store, A, B)).toBe(false);
+  });
+
+  it("never replaces a key already saved for the new address", async () => {
+    const env = tempConfig();
+    const store = await openStore(env);
+    await store.set(saved(GOOD_KEY, A));
+    await store.set(saved("wity_newer_000000000000000000000", B));
+
+    expect(await moveKey(store, A, B)).toBe(false);
+    expect((await store.get(B))?.key).toBe("wity_newer_000000000000000000000");
+    expect((await store.get(A))?.key).toBe(GOOD_KEY);
+  });
+
+  it("does nothing when there's no old key, or both addresses are the same", async () => {
+    const env = tempConfig();
+    const store = await openStore(env);
+    expect(await moveKey(store, A, B)).toBe(false);
+    await store.set(saved(GOOD_KEY, A));
+    expect(await moveKey(store, A, A)).toBe(false);
+    expect(await store.get(A)).toEqual(saved(GOOD_KEY, A));
   });
 });
 

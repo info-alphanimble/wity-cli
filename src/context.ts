@@ -1,7 +1,8 @@
 // What every command gets: the terminal, the API address, the key store and the colour functions.
 
-import { resolveBaseURL } from "./config.ts";
-import { openStore, type Store } from "./credentials.ts";
+import { DEFAULT_BASE_URL } from "wity-sdk";
+import { OLD_BASE_URL, resolveBaseURL } from "./config.ts";
+import { moveKey, openStore, type Store } from "./credentials.ts";
 import type { Io } from "./io.ts";
 import { type Paint, painter, shouldColor } from "./output.ts";
 
@@ -15,6 +16,21 @@ export interface Ctx {
   err: Paint;
 }
 
+/**
+ * Opens the store and, on the default address, moves a key saved under the old one.
+ * The notice goes to stderr, so stdout stays clean for JSON and for `wity mcp serve`.
+ */
+const openAndMove = async (io: Io, baseURL: string): Promise<Store> => {
+  const store = await openStore(io.env);
+  if (baseURL === DEFAULT_BASE_URL && (await moveKey(store, OLD_BASE_URL, baseURL))) {
+    io.stderr.write(
+      `[wity] Notice: the Wity API has moved to ${baseURL}.\n` +
+        "[wity] Your saved API key was moved to the new address. No action is needed.\n",
+    );
+  }
+  return store;
+};
+
 export const makeCtx = (io: Io, baseUrlFlag: string | undefined): Ctx => {
   const baseURL = resolveBaseURL(baseUrlFlag, io.env);
   let opened: Promise<Store> | undefined;
@@ -22,7 +38,7 @@ export const makeCtx = (io: Io, baseUrlFlag: string | undefined): Ctx => {
     io,
     baseURL,
     store: () => {
-      opened ??= openStore(io.env);
+      opened ??= openAndMove(io, baseURL);
       return opened;
     },
     out: painter(shouldColor(io.env, io.stdout)),

@@ -8,6 +8,13 @@ export const CONSOLE_URL = "https://wity.alphanimble.com";
 export const KEYS_PAGE = `${CONSOLE_URL}/console/keys`;
 export const BILLING_PAGE = `${CONSOLE_URL}/console/billing`;
 
+/**
+ * Where the API lived before it moved to api.wity.alphanimble.com (SDK 0.1.1).
+ * Keys saved by CLI 0.1.0 are filed under it, so they're moved to the new address on first use.
+ * Both addresses reach the same server, so moving the key doesn't send it anywhere new.
+ */
+export const OLD_BASE_URL: string = "https://wity-proxy-production-2c33.up.railway.app";
+
 /** Dollars per million input tokens, from wity.alphanimble.com/pricing. Output and thinking are free. */
 export const PRICE_PER_MILLION_INPUT_USD = 0.042;
 

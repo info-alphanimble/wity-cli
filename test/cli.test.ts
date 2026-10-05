@@ -2,6 +2,9 @@
 
 import { stripVTControlCharacters as plain } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_BASE_URL } from "wity-sdk";
+import { OLD_BASE_URL } from "../src/config.ts";
+import { openStore } from "../src/credentials.ts";
 import { EXIT } from "../src/exit.ts";
 import { BAD_KEY, fakeWity, fixture, GOOD_KEY, run, tempConfig } from "./helpers.ts";
 
@@ -170,6 +173,40 @@ describe("api-key show and api-key remove", () => {
     expect(res.code).toBe(EXIT.auth);
     expect(other.seen).toHaveLength(0);
     await other.close();
+  });
+});
+
+// Only runs on an SDK whose default address is the new one (0.1.1 and later).
+describe.skipIf(DEFAULT_BASE_URL === OLD_BASE_URL)("key saved under the old API address", () => {
+  const savedUnderOld = async (env: Record<string, string>) => {
+    const store = await openStore(env);
+    await store.set({ key: GOOD_KEY, baseURL: OLD_BASE_URL, savedAt: "2026-09-30T10:00:00.000Z", via: "paste" });
+    return store;
+  };
+
+  it("is moved to the new address once, with a notice on stderr", async () => {
+    const config = tempConfig();
+    const store = await savedUnderOld(config);
+
+    // `api-key remove` opens the store without calling the API, so nothing leaves this machine.
+    const first = await run(["api-key", "remove"], { env: config });
+    expect(first.code).toBe(EXIT.ok);
+    expect(first.stdout).toBe("");
+    expect(first.stderr).toContain(`[wity] Notice: the Wity API has moved to ${DEFAULT_BASE_URL}.`);
+    expect(first.stderr).toContain("Removed the key");
+    expect(await store.get(OLD_BASE_URL)).toBeUndefined();
+    expect(await store.get(DEFAULT_BASE_URL)).toBeUndefined();
+
+    const second = await run(["api-key", "remove"], { env: config });
+    expect(second.stderr).not.toContain("Notice");
+    expectNoKey(first.stdout, first.stderr);
+  });
+
+  it("is left alone when another API address is in use", async () => {
+    const store = await savedUnderOld(env);
+    const res = await run(["api-key", "remove"], { env });
+    expect(res.stderr).not.toContain("Notice");
+    expect((await store.get(OLD_BASE_URL))?.key).toBe(GOOD_KEY);
   });
 });
 

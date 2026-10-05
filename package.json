@@ -1,6 +1,6 @@
 {
   "name": "wity-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Command-line tool for Wity, the typed-decision API",
   "homepage": "https://wity.alphanimble.com",
   "repository": {

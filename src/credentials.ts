@@ -224,6 +224,19 @@ export const openStore = async (env: Env): Promise<Store> => {
   return fileStore(env);
 };
 
+/**
+ * Moves the key saved under `from` to `to`, unless `to` already has one. `true` if a key was moved.
+ * The new entry is written before the old one is removed, so a failure never loses the key.
+ */
+export const moveKey = async (store: Store, from: string, to: string): Promise<boolean> => {
+  if (from === to || (await store.get(to))) return false;
+  const old = await store.get(from);
+  if (!old) return false;
+  await store.set({ ...old, baseURL: to });
+  await store.delete(from);
+  return true;
+};
+
 export type KeySource = "env" | StoreKind;
 
 export interface FoundKey {
