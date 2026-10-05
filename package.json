@@ -45,6 +45,6 @@
     "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
     "vitest": "^5.0.2",
-    "wity-sdk": "^0.1.0"
+    "wity-sdk": "^0.1.1"
   }
 }
