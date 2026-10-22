@@ -33,8 +33,19 @@ export const scoreSchema = z.strictObject({
 
 export const questionSchema = z.discriminatedUnion("type", [noulSchema, choiceSchema, scoreSchema]);
 
+/** `{ skill: name }`: a saved skill's question. It has no `type`, which is how it's told apart. */
+export const skillQuestionSchema = z.strictObject({ type: z.undefined().optional(), skill: text });
+
+/** A question in a file: a typed question, or a saved skill. */
+export const fileQuestionSchema = z.discriminatedUnion("type", [
+  noulSchema,
+  choiceSchema,
+  scoreSchema,
+  skillQuestionSchema,
+]);
+
 export const questionsSchema = z
-  .record(z.string().trim().min(1, "question names can't be empty").max(64), questionSchema)
+  .record(z.string().trim().min(1, "question names can't be empty").max(64), fileQuestionSchema)
   .refine((questions) => Object.keys(questions).length > 0, "needs at least one question");
 
 /** Text, or an object or array that Wity reads as JSON. */
@@ -48,6 +59,48 @@ export const askFileSchema = z.strictObject({
   questions: questionsSchema,
   reasoning: reasoningSchema.optional(),
   max_latency_ms: z.number().int().min(200).max(120_000).optional(),
+});
+
+/** What one item is, in detail. Used by `wity skills add` and `edit` for split skills. */
+export const splitSpecSchema = z.strictObject({
+  unit: text,
+  starts_at: z.array(text).max(8).optional(),
+  keep_together: z.array(text).max(8).optional(),
+  never_split: z.array(text).max(8).optional(),
+});
+
+const metadataSchema = z.record(z.string(), z.json());
+const partsSchema = z.union([z.literal("auto"), z.record(z.string(), z.union([text, noulSchema, choiceSchema]))]);
+
+/** A `wity skills add` file for a decision skill: a noul or choice question. Wity checks the examples. */
+export const decisionSkillFileSchema = z.strictObject({
+  name: text,
+  description: z.string().optional(),
+  question: z.discriminatedUnion("type", [noulSchema, choiceSchema]),
+  examples: z.array(z.json()).optional(),
+  parts: partsSchema.optional(),
+  combine: text.optional(),
+  metadata: metadataSchema.optional(),
+});
+
+/** A `wity skills add` file for a split skill: what one item is. */
+export const splitSkillFileSchema = z.strictObject({
+  name: text,
+  description: z.string().optional(),
+  split: z.union([text, splitSpecSchema]),
+  examples: z.array(z.json()).optional(),
+  metadata: metadataSchema.optional(),
+});
+
+/** A `wity skills edit` file. Only what changes. `null` removes the parts or the rule. */
+export const skillChangesSchema = z.strictObject({
+  name: text.optional(),
+  description: z.string().optional(),
+  question: z.discriminatedUnion("type", [noulSchema, choiceSchema]).optional(),
+  parts: partsSchema.nullable().optional(),
+  combine: text.nullable().optional(),
+  split: z.union([text, splitSpecSchema]).optional(),
+  metadata: metadataSchema.optional(),
 });
 
 /** State length as Wity counts it: characters of the text, or of the JSON for an object. */

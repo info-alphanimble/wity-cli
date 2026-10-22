@@ -33,6 +33,8 @@ export const fakeWity = async () => {
   let next: Reply = fixture("noul");
   let nextGenerate: Reply = fixture("generate-text");
   let modelsReply: Reply | undefined;
+  /** Replies for other routes, by "METHOD /path" without the query. */
+  const routes = new Map<string, Reply>();
 
   const readBody = async (req: IncomingMessage): Promise<unknown> => {
     const chunks: Buffer[] = [];
@@ -78,6 +80,11 @@ export const fakeWity = async () => {
       if (req.headers.authorization !== `Bearer ${GOOD_KEY}`) return send(fixture("error-bad-key"));
       return send(nextGenerate);
     }
+    const reply = routes.get(`${req.method} ${path.split("?")[0]}`);
+    if (reply) {
+      if (req.headers.authorization !== `Bearer ${GOOD_KEY}`) return send(fixture("error-bad-key"));
+      return send(reply);
+    }
     send({ status: 404, body: { detail: "Not Found" } });
   });
 
@@ -98,6 +105,10 @@ export const fakeWity = async () => {
     /** Replace the /v1/models reply, for example with a redirect. */
     models: (value: Reply | undefined) => {
       modelsReply = value;
+    },
+    /** The reply for any other route, like on("POST /v1/split", { status: 200, body }). */
+    on: (route: string, value: Reply) => {
+      routes.set(route, value);
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

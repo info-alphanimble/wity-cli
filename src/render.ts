@@ -124,6 +124,23 @@ export const renderScore = (answer: ScoreAnswer, paint: Paint, columns?: number)
   ];
 };
 
+/** One part's answer, in a few words: "yes 12.00%" or "billing 87.00%". */
+const partSummary = (answer: NoulAnswer | ChoiceAnswer): string =>
+  answer.type === "noul"
+    ? `yes ${pct(answer.noul)}`
+    : `${truncate(clean(answer.choice), MAX_LABEL)} ${pct(answer.probabilities[answer.choice] ?? 0)}`;
+
+/** Which skill answered, and its parts' answers. Only on answers to skill questions. */
+const skillNote = (answer: NoulAnswer | ChoiceAnswer, paint: Paint): string[] => {
+  if (!answer.skill) return [];
+  const { name, version, answered_by } = answer.skill;
+  const lines = [`  ${paint("dim", `skill ${clean(name)} · version ${version} · answered by ${clean(answered_by)}`)}`];
+  for (const [part, partAnswer] of Object.entries(answer.parts ?? {})) {
+    lines.push(`    ${paint("dim", `${clean(part)}: ${partSummary(partAnswer)}`)}`);
+  }
+  return lines;
+};
+
 /** Any answer, by its type. */
 export const renderAnswer = (
   answer: ChoiceAnswer | NoulAnswer | ScoreAnswer,
@@ -131,9 +148,9 @@ export const renderAnswer = (
   columns?: number,
 ): string[] =>
   answer.type === "noul"
-    ? renderNoul(answer, paint, columns)
+    ? [...renderNoul(answer, paint, columns), ...spaced(skillNote(answer, paint))]
     : answer.type === "choice"
-      ? renderChoice(answer, paint, columns)
+      ? [...renderChoice(answer, paint, columns), ...spaced(skillNote(answer, paint))]
       : renderScore(answer, paint, columns);
 
 /** A blank line before a block, if there is a block. */

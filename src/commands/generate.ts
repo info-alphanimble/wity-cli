@@ -19,7 +19,7 @@ export interface GenerateFlags extends StateFlags {
 }
 
 /** State is optional here: some instructions need no input. Empty stdin means none. */
-const readOptionalState = async (flags: StateFlags, ctx: Ctx): Promise<string | undefined> => {
+export const readOptionalState = async (flags: StateFlags, ctx: Ctx): Promise<string | undefined> => {
   if (flags.text !== undefined || flags.file !== undefined) return readState(flags, ctx.io);
   if (ctx.io.stdin.isTTY) return undefined;
   const piped = await readStdin(ctx.io.stdin);

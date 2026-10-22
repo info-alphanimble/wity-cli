@@ -1,6 +1,6 @@
 {
   "name": "wity-cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Command-line tool for Wity, the typed-decision API",
   "homepage": "https://wity.alphanimble.com",
   "repository": {
@@ -29,7 +29,7 @@
     "prepublishOnly": "npm run check"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@napi-rs/keyring": "^2.1.0",
     "commander": "^15.0.0",
     "ink": "^7.1.1",
@@ -45,6 +45,6 @@
     "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
     "vitest": "^5.0.2",
-    "wity-sdk": "^0.1.1"
+    "wity-sdk": "^0.2.0"
   }
 }

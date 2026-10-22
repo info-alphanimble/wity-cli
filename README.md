@@ -100,6 +100,7 @@ wity ask questions.yaml --file ticket.txt --field team.choice
 ```
 
 - `state` can also be an object, which Wity reads as JSON.
+- A question can be a saved [skill](#skills): `urgent: {skill: urgent-ticket}`.
 - Every problem in the file is listed before anything is sent.
 - `--reasoning` and `--max-latency` override the file.
 
@@ -117,6 +118,116 @@ wity generate "Origin city and seat" --text "LISBOA (LIS) -> BER, seat 23C" --sh
 - If Wity hits `--max-tokens` (default 128), it says so. With `--shape`, it exits with 1, because the JSON isn't complete.
 - Check generated text before you act on it. It can say things that aren't in the input.
 
+## Split
+
+`wity split` cuts a document into whole items: emails from a thread, clauses from a contract, entries from a log. Every item is an exact slice of the text, with its start and end offsets.
+
+```sh
+wity split --file thread.txt --by "one item per email"
+wity split --file contract.txt --unit clause --starts-at "a numbered heading like 4. Liability."
+wity split --file thread.txt --skill email-thread
+```
+
+- The text comes from `--text`, `--file` (`-` for stdin), or a pipe. Up to 60,000 characters.
+- Say what one item is with `--by`, in plain words. The default is one item per paragraph.
+- For more control, give `--unit`, with `--starts-at`, `--keep-together` and `--never-split` (each up to 8 times).
+- Or use `--skill` with a split skill. It splits the way its examples do, so leave out the other options.
+- On a terminal it prints the items, numbered, with their offsets. Piped, it prints JSON.
+- `--jsonl` prints one item per line, for scripts:
+
+```sh
+wity split --file thread.txt --by "one item per email" --jsonl |
+  while IFS= read -r item; do printf '%s' "$item" | wity noul "Is this a complaint?" --field noul; done
+```
+
+## Extract
+
+`wity extract` pulls named fields out of a document. Each value comes back as written, with its position and a confidence.
+
+```sh
+wity extract --file contract.txt \
+  -f party="a company that signs the agreement" \
+  -f "effective date"="when it takes effect" \
+  --type "effective date"=date
+```
+
+- Give 1 to 16 fields with `-f name="what it asks for"`.
+- `--type name=date|duration|number` makes a field come back normalised. Dates come back as YYYY-MM-DD.
+- A field with no values prints "none found".
+- Confidence is from 0 to 1. It isn't calibrated.
+- Up to 60,000 characters of text. `--json`, `--dry-run` and `--code` work like they do for the other commands.
+
+## Skills
+
+A skill saves a question once, and learns your definition from labelled examples. Reading and managing skills is free. Adding examples is billed once, on their tokens.
+
+```yaml
+# urgent-ticket.yaml: a decision skill
+name: urgent-ticket
+question:
+  type: noul
+  instructions: Does this support ticket need a reply within the hour?
+examples:
+  - {state: Checkout is down for every customer., answer: yes}
+  - {state: Can you change my invoice address?, answer: no}
+```
+
+```yaml
+# email-thread.yaml: a split skill
+name: email-thread
+split: one item per email
+examples:
+  - text: "From: dana@example.com\nSeal test failed.\n\nFrom: marcus@example.com\nRerun tomorrow."
+    items: ["From: dana@example.com\nSeal test failed.", "From: marcus@example.com\nRerun tomorrow."]
+```
+
+```sh
+wity skills add urgent-ticket.yaml                  # make a skill from a file
+wity skills list                                    # your skills, newest first
+wity skills show urgent-ticket                      # its question, examples, status and quality
+wity skills try urgent-ticket --file ticket.txt     # ask its question about a text
+wity skills edit urgent-ticket --description "..."  # or a file with only the fields to change
+wity skills delete urgent-ticket
+
+wity skills examples add urgent-ticket more.yaml    # a list of {state, answer}, or {text, items} for split skills
+wity skills examples list urgent-ticket
+wity skills examples delete urgent-ticket ex_…
+```
+
+- A decision skill has a `noul` or `choice` question. It can also have `description`, `parts`, `combine` and `metadata`.
+- A decision skill starts learning at 8 examples, with at least 2 for each of two answers.
+- For a split skill, one example already helps, and about three is enough.
+- A new question, parts or rule makes the skill learn again.
+- Every command takes the skill's name or its id (`sk_…`).
+- Use a decision skill in `wity ask` as `{skill: urgent-ticket}`. Use a split skill with `wity split --skill`.
+
+## Sessions
+
+A session keeps a state on Wity's side. Add to it as things happen, decide when you need to, and correct the answers so the skills learn. Decisions are billed like questions. Events, reads and repeats are free.
+
+```sh
+wity sessions add --text "Ticket #5120 from Northwind Foods." --skill urgent-ticket --expires-in 30d
+wity sessions event ses_… --update "Customer: checkout still fails."
+wity sessions decide ses_…                          # runs the session's skills
+wity sessions event ses_… --feedback ev_… --answer no   # it was wrong: this becomes an example
+wity sessions log ses_…                             # every event, oldest first
+```
+
+| Event | Does |
+|---|---|
+| `--update <text>` | Adds to what Wity reads |
+| `--state <text>` | Replaces what Wity reads from here on |
+| `--note <text>` | Kept in the log, never read |
+| `--feedback <decision_id> --answer <a>` | The right answer to an earlier decision. Add `--question <name>` if it had more than one skill |
+
+- `decide` takes a questions file like `wity ask`, without a state, to ask your own questions instead. Its reasoning defaults to `off`.
+- `--remember` adds the decision's answers to what later decisions read.
+- A repeat of the same contents and questions gives the same answer, for 0 tokens.
+- `wity sessions list`, `show`, `edit` (skills, expiry) and `delete` work like the skills commands.
+- Sessions expire after 7 days, unless `--expires-in` says otherwise (60 s to 90 days, like `12h` or `30d`).
+
+**Deleting.** `delete` commands ask first on a terminal. Scripts must pass `--yes`.
+
 ## Playground
 
 Run `wity` with no arguments, or `wity playground --file ticket.txt`, to try questions live.
@@ -128,7 +239,11 @@ Run `wity` with no arguments, or `wity playground --file ticket.txt`, to try que
 
 ## AI agents (MCP)
 
-`wity mcp serve` gives AI apps Wity as tools: `wity_noul`, `wity_choice`, `wity_score`, `wity_ask` and `wity_generate`. Set a key first with `wity api-key set`, or set `WITY_API_KEY`.
+`wity mcp serve` gives AI apps Wity as tools. Set a key first with `wity api-key set`, or set `WITY_API_KEY`.
+
+- Questions: `wity_noul`, `wity_choice`, `wity_score`, `wity_ask`, and `wity_skill` for a saved skill.
+- Documents: `wity_split` and `wity_extract`. Writing: `wity_generate`.
+- Free reads: `wity_list_skills` and `wity_list_sessions`.
 
 ```sh
 claude mcp add wity -- wity mcp serve --max-spend 1   # Claude Code
@@ -146,6 +261,7 @@ For Claude Desktop, Cursor and other apps, add this to their MCP settings:
 
 - It talks over stdin and stdout only, and opens no network port.
 - No tool takes a key, or can set or remove one. The key never appears in tool output.
+- The tools only use Wity. None can make, change or delete a skill, a session or anything else.
 - `--max-spend` stops paid calls after that many dollars in one session, in case an agent gets stuck in a loop.
 
 ## Exit codes
@@ -157,7 +273,7 @@ For Claude Desktop, Cursor and other apps, add this to their MCP settings:
 | 2 | Bad flags or input. Nothing was billed. |
 | 3 | No API key, or the key was refused |
 | 10 | Answered, but failed `--fail-under` or `--expect` |
-| 130 | Cancelled with Ctrl+C |
+| 130 | Cancelled with Ctrl+C, or you said no to a delete |
 
 ```sh
 if wity noul "Does this diff touch billing code?" --file change.diff --fail-under 0.5 >/dev/null; then

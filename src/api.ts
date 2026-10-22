@@ -8,8 +8,10 @@ import {
   APIUserAbortError,
   AuthenticationError,
   BadRequestError,
+  ConflictError,
   InsufficientBalanceError,
   type LogLevel,
+  NotFoundError,
   RateLimitError,
   WityClient,
   WityError,
@@ -95,6 +97,9 @@ export const refusedHint = (found: Pick<FoundKey, "source">): string =>
     ? "The key comes from WITY_API_KEY. Check it, or unset it to use the key saved by `wity api-key set`."
     : "It may have been revoked. Run `wity api-key set` to save a new key.";
 
+/** The server's own words, without the status code the SDK puts in front: "no skill 'nope'". */
+const detail = (err: APIError): string => clean(err.message.replace(/^\d{3} /, "").replace(/\.$/, ""));
+
 /** Turn an SDK error into a message and exit code for the terminal. */
 export const explain = (err: unknown, found: Pick<FoundKey, "source">): unknown => {
   if (!(err instanceof WityError)) return err;
@@ -107,6 +112,24 @@ export const explain = (err: unknown, found: Pick<FoundKey, "source">): unknown 
   }
   if (err instanceof BadRequestError) {
     return new CliError(`Wity refused the request: ${clean(err.message)}`, EXIT.usage, `Nothing was billed.${id}`);
+  }
+  if (err instanceof NotFoundError) {
+    // Wity marks "no such skill, session or example" with a code. Without it, the address itself is wrong.
+    if ((err.body as { code?: unknown } | undefined)?.code !== "not_found") {
+      return new CliError(
+        "Wity's address answered 404 Not Found.",
+        EXIT.error,
+        "The API address may have changed. Update wity-cli, or check WITY_BASE_URL.",
+      );
+    }
+    return new CliError(
+      `Not found: ${detail(err)}.`,
+      EXIT.usage,
+      "Check the name or id. `wity skills list` and `wity sessions list` show what you have.",
+    );
+  }
+  if (err instanceof ConflictError) {
+    return new CliError(`That name is taken: ${detail(err)}.`, EXIT.usage, "Pick another name.");
   }
   if (err instanceof RateLimitError) {
     return new CliError("Too many requests at once for this key.", EXIT.error, `Wait a moment and try again.${id}`);

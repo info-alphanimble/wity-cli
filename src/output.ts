@@ -117,3 +117,19 @@ export const spinner = (io: Io, text: string | (() => string), slowText?: string
     io.stderr.write("\r\x1b[2K\x1b[?25h");
   };
 };
+
+/** Rows lined up in columns. The first row is the header, drawn dim. Clean every cell before passing it. */
+export const table = (rows: string[][], paint: Paint): string[] => {
+  const widths = (rows[0] ?? []).map((_, i) => Math.max(...rows.map((row) => (row[i] ?? "").length)));
+  return rows.map((row, r) => {
+    const line = row.map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i] ?? 0))).join("  ");
+    return `  ${r === 0 ? paint("dim", line) : line}`;
+  });
+};
+
+/** A count with its word: "1 skill", "2 skills". */
+export const plural = (n: number, word: string): string => `${n.toLocaleString("en")} ${word}${n === 1 ? "" : "s"}`;
+
+/** Unix seconds as a UTC date and time, like "2026-10-22 14:05 UTC". */
+export const when = (seconds: number): string =>
+  `${new Date(seconds * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC`;

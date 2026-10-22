@@ -192,15 +192,14 @@ describe("--code", () => {
     expect((await run(["generate", "Say hi", "--code", "python"], { env })).code).toBe(EXIT.usage);
   });
 
-  it("writes code that type-checks against the SDK", async () => {
-    const res = await run(["ask", write("q.yaml", QUESTIONS), "--text", "x", "--code", "ts"], { env });
-    // Compiled inside the project, so the SDK import resolves to the same SDK the CLI uses.
+  /** Compiled inside the project, so the SDK import resolves to the same SDK the CLI uses. */
+  const typeCheck = async (code: string, name: string) => {
     const { execFileSync } = await import("node:child_process");
     const { mkdirSync } = await import("node:fs");
     const folder = join(process.cwd(), "node_modules", ".cache", "wity-cli-test");
     mkdirSync(folder, { recursive: true });
-    const file = join(folder, "snippet.mts");
-    writeFileSync(file, res.stdout);
+    const file = join(folder, `${name}.mts`);
+    writeFileSync(file, code);
     const tsc = join(process.cwd(), "node_modules", ".bin", "tsc");
     const args = [
       "--ignoreConfig",
@@ -216,5 +215,29 @@ describe("--code", () => {
       file,
     ];
     execFileSync(tsc, args, { cwd: process.cwd() });
+  };
+
+  it("writes code that type-checks against the SDK", async () => {
+    const res = await run(["ask", write("q.yaml", QUESTIONS), "--text", "x", "--code", "ts"], { env });
+    await typeCheck(res.stdout, "snippet");
   }, 20_000);
+
+  it("writes split, extract and skill code that type-checks", async () => {
+    const withSkill = write("skill.yaml", `${QUESTIONS}  known:\n    skill: urgent-ticket\n`);
+    const ask = await run(["ask", withSkill, "--text", "x", "--code", "ts"], { env });
+    expect(ask.stdout).toContain('known: skill("urgent-ticket"),');
+    const split = await run(["split", "-t", "a\n\nb", "--unit", "email", "--starts-at", "From:", "--code", "ts"], {
+      env,
+    });
+    const extract = await run(
+      ["extract", "-t", "x", "-f", "start=when it starts", "--type", "start=date", "--code", "ts"],
+      {
+        env,
+      },
+    );
+    // One file each: every snippet declares its own `client` and `res`.
+    await typeCheck(ask.stdout, "skill-snippet");
+    await typeCheck(split.stdout, "split-snippet");
+    await typeCheck(extract.stdout, "extract-snippet");
+  }, 30_000);
 });

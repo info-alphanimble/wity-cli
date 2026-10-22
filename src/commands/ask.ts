@@ -113,7 +113,8 @@ export const askFile = async (ctx: Ctx, path: string, flags: AskFileFlags): Prom
     for (const [name, question] of Object.entries(file.questions)) {
       const answer = res.answers[name];
       if (!answer) continue;
-      lines.push(`  ${p("dim", clean(name))}  ${p("bold", clean(question.instructions))}`, "");
+      const title = "skill" in question ? `skill ${question.skill}` : question.instructions;
+      lines.push(`  ${p("dim", clean(name))}  ${p("bold", clean(title))}`, "");
       lines.push(...renderAnswer(answer, p, io.stdout.columns), "");
     }
     lines.push(renderFooter(res, totalMs, p), "");

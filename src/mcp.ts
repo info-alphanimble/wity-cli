@@ -4,12 +4,21 @@
 // - stdout carries MCP messages and nothing else. Logs and notices go to stderr.
 // - It uses the saved key (or WITY_API_KEY). The key is never a tool input or part of any tool output,
 //   and no tool can set, show or remove keys.
+// - Tools only use Wity. None can make, change or delete a skill, a session or anything else.
 // - `--max-spend` stops paid calls after a set amount per session, in case an agent gets stuck in a loop.
 
 import type { Readable, Writable } from "node:stream";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { GenerateRequest, Reasoning, SystemOneRequest, SystemOneResponse } from "wity-sdk";
+import {
+  type ExtractRequest,
+  type GenerateRequest,
+  type Reasoning,
+  type SplitRequest,
+  type SystemOneRequest,
+  type SystemOneResponse,
+  skill as skillQuestion,
+} from "wity-sdk";
 import { z } from "zod";
 import pkg from "../package.json" with { type: "json" };
 import { explain, makeClient } from "./api.ts";
@@ -17,9 +26,9 @@ import { PRICE_PER_MILLION_INPUT_USD } from "./config.ts";
 import type { Ctx } from "./context.ts";
 import type { FoundKey } from "./credentials.ts";
 import { CliError, EXIT, type ExitCode } from "./exit.ts";
-import { MAX_STATE_CHARS } from "./input.ts";
-import { clean, cost, pct } from "./output.ts";
-import { checkStateLength, questionSchema } from "./schema.ts";
+import { MAX_DOC_CHARS, MAX_STATE_CHARS } from "./input.ts";
+import { clean, cost, pct, plural } from "./output.ts";
+import { checkStateLength, questionSchema, splitSpecSchema } from "./schema.ts";
 import { requireKey } from "./send.ts";
 
 const UNCALIBRATED = "Probabilities rank how sure Wity is. They aren't calibrated odds.";
@@ -29,6 +38,15 @@ const text = z
   .min(1)
   .max(MAX_STATE_CHARS)
   .describe("The text to judge: an email, a ticket, a diff, a document…");
+const document = z
+  .string()
+  .min(1)
+  .max(MAX_DOC_CHARS)
+  .describe("The document: an email thread, a contract, a log, a chat…");
+const page = {
+  limit: z.number().int().min(1).max(100).optional().describe("How many to return, 1 to 100."),
+  after: z.string().min(1).optional().describe("The last id of the page before, for the next page."),
+};
 const reasoning = z
   .enum(["off", "auto", "always"])
   .optional()
@@ -216,6 +234,136 @@ export const createMcpServer = (ctx: Ctx, found: FoundKey, opts: { maxSpendUsd?:
         return failed(err instanceof CliError ? err : explain(err, found));
       }
     },
+  );
+
+  server.registerTool(
+    "wity_split",
+    {
+      title: "Cut a document into items",
+      description:
+        "Ask Wity to cut a document into whole items, like emails from a thread, clauses from a contract or entries from a log. Every item is an exact slice of the text, with its start and end offsets. Say what one item is with split (plain words, or a spec), or name a split skill with skill. Not both. Billed per input token.",
+      inputSchema: {
+        text: document,
+        split: z
+          .union([z.string().min(3).max(300), splitSpecSchema])
+          .optional()
+          .describe(
+            'What one item is: plain words like "one item per email", or {unit, starts_at, keep_together, never_split}. Default: one item per paragraph.',
+          ),
+        skill: z.string().min(1).optional().describe("A split skill's name or id. It splits the way it was taught."),
+      },
+      annotations: readOnly,
+    },
+    async ({ text: doc, split, skill }) => {
+      try {
+        guard();
+        if (split !== undefined && skill !== undefined) {
+          throw new CliError("Give split or skill, not both. A split skill brings its own split.", EXIT.usage);
+        }
+        const req = { text: doc, ...(split !== undefined && { split }), ...(skill !== undefined && { skill }) };
+        const res = await client.split(req as SplitRequest, { signal: ctx.io.signal });
+        spentTokens += res.usage.input_tokens;
+        const how = res.skill
+          ? `with the skill ${clean(res.skill.name)}`
+          : res.how === "model"
+            ? "by the model"
+            : "by rule";
+        return done(`${res.items.length} items, cut ${how} · ${usage(res)}.`, res);
+      } catch (err) {
+        return failed(err instanceof CliError ? err : explain(err, found));
+      }
+    },
+  );
+
+  server.registerTool(
+    "wity_extract",
+    {
+      title: "Pull named fields out of a document",
+      description: `Ask Wity to pull named fields out of a document, like parties and dates from a contract. Each value comes back as written, with its offsets and a confidence from 0 to 1. Confidence isn't calibrated. A field with no values comes back as []. Billed per input token.`,
+      inputSchema: {
+        text: document,
+        fields: z
+          .record(z.string().min(1).max(64), z.string().min(1).max(300))
+          .refine((f) => Object.keys(f).length >= 1 && Object.keys(f).length <= 16, "needs 1 to 16 fields")
+          .describe('Field names mapped to what each asks for, like {"party": "a company that signs the agreement"}.'),
+        types: z
+          .record(z.string(), z.enum(["date", "duration", "number"]))
+          .optional()
+          .describe("Fields that should come back normalised: date (YYYY-MM-DD), duration or number."),
+      },
+      annotations: readOnly,
+    },
+    async ({ text: doc, fields, types }) => {
+      try {
+        guard();
+        const req: ExtractRequest = { text: doc, fields, ...(types && { types }) };
+        const res = await client.extract(req, { signal: ctx.io.signal });
+        spentTokens += res.usage.input_tokens;
+        const counts = Object.entries(res.fields)
+          .map(([name, values]) => `${name}: ${values.length} value${values.length === 1 ? "" : "s"}`)
+          .join(" · ");
+        return done(`${counts} · ${usage(res)}. Confidence isn't calibrated.`, res);
+      } catch (err) {
+        return failed(err instanceof CliError ? err : explain(err, found));
+      }
+    },
+  );
+
+  server.registerTool(
+    "wity_skill",
+    {
+      title: "Ask a saved skill",
+      description: `Ask a saved decision skill's question about a text. A skill is a yes-or-no or choice question the user saved and taught with examples, so it decides their way. Use wity_list_skills to see the skills. The answer says which skill version answered, and how. ${UNCALIBRATED}`,
+      inputSchema: {
+        text,
+        skill: z.string().min(1).describe("The skill's name or id."),
+      },
+      annotations: readOnly,
+    },
+    async ({ text: state, skill }) => systemOne({ state, questions: { answer: skillQuestion(skill) } }),
+  );
+
+  /** Free reads. They don't count toward --max-spend. */
+  const read = async (summary: (res: { data: unknown[] }) => string, call: () => Promise<{ data: unknown[] }>) => {
+    try {
+      const res = await call();
+      return done(summary(res), res);
+    } catch (err) {
+      return failed(explain(err, found));
+    }
+  };
+
+  server.registerTool(
+    "wity_list_skills",
+    {
+      title: "List saved skills",
+      description:
+        "List the user's saved skills, newest first: each one's name, kind (decision or split), question or split, examples and status. Free.",
+      inputSchema: page,
+      annotations: readOnly,
+    },
+    async ({ limit, after }) =>
+      read(
+        (res) =>
+          `${plural(res.data.length, "skill")}. Use a decision skill with wity_skill, a split skill with wity_split.`,
+        () => client.skills.list({ limit, after, signal: ctx.io.signal }),
+      ),
+  );
+
+  server.registerTool(
+    "wity_list_sessions",
+    {
+      title: "List sessions",
+      description:
+        "List the user's sessions, newest first: each one's id, state, skills, number of events and when it expires. Free.",
+      inputSchema: page,
+      annotations: readOnly,
+    },
+    async ({ limit, after }) =>
+      read(
+        (res) => `${plural(res.data.length, "session")}.`,
+        () => client.sessions.list({ limit, after, signal: ctx.io.signal }),
+      ),
   );
 
   return server;

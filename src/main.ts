@@ -6,8 +6,37 @@ import pkg from "../package.json" with { type: "json" };
 import { removeKey, type SetKeyOptions, setKey, showKey } from "./commands/api-key.ts";
 import { type AskFileFlags, askFile } from "./commands/ask.ts";
 import { doctor } from "./commands/doctor.ts";
+import { type ExtractFlags, extract } from "./commands/extract.ts";
 import { type GenerateFlags, generate } from "./commands/generate.ts";
 import { type AskFlags, ask, choiceQuestion, noulQuestion, scoreQuestion } from "./commands/questions.ts";
+import {
+  type AddSessionFlags,
+  addEvent,
+  addSession,
+  type DecideFlags,
+  decide,
+  deleteSession,
+  type EventFlags,
+  editSession,
+  listSessions,
+  showLog,
+  showSession,
+} from "./commands/sessions.ts";
+import {
+  addExamples,
+  addSkill,
+  deleteExample,
+  deleteSkill,
+  type EditFlags,
+  editSkill,
+  type ListFlags,
+  listExamples,
+  listSkills,
+  showSkill,
+  type TryFlags,
+  trySkill,
+} from "./commands/skills.ts";
+import { type SplitFlags, split } from "./commands/split.ts";
 import { makeCtx } from "./context.ts";
 import { CliError, EXIT } from "./exit.ts";
 import { readState, type StateFlags } from "./input.ts";
@@ -44,6 +73,10 @@ Examples:
   wity noul "Is this safe to merge?" --file diff.txt --fail-under 0.8 && git merge
   wity ask questions.yaml --file ticket.txt
   wity generate "A one-line reply to this customer" --file ticket.txt
+  wity split --file thread.txt --by "one item per email" --jsonl
+  wity extract -f party="a company that signs it" -f start="when it takes effect" --type start=date --file contract.txt
+  wity skills add urgent-ticket.yaml && wity skills try urgent-ticket --file ticket.txt
+  wity sessions add --text "Ticket #5120 from Northwind" --skill urgent-ticket
 
 Exit codes:
   0 ok · 1 API or network error · 2 bad input (not billed) · 3 no API key, or the key was refused
@@ -197,6 +230,231 @@ export const main = async (argv: string[], io: Io): Promise<number> => {
     .action(async (instructions: string, opts: GenerateFlags) => {
       code = await generate(ctx(), instructions, opts);
     });
+
+  program
+    .command("split")
+    .description("cut a document into whole items, like emails from a thread or clauses from a contract")
+    .option("-t, --text <text>", "the document")
+    .option("--file <path>", "read the document from a file (- for stdin)")
+    .option("--by <words>", 'what one item is, in plain words, like "one item per email"')
+    .option("--unit <unit>", 'what one item is, in a word or two, like "clause"')
+    .option("--starts-at <text>", "what a new item starts with, repeat for each (up to 8)", collect)
+    .option("--keep-together <text>", "what stays inside one item, repeat for each (up to 8)", collect)
+    .option("--never-split <text>", "where an item never starts, repeat for each (up to 8)", collect)
+    .option("--skill <name>", "split the way a split skill was taught")
+    .option("--json", "print the full response as JSON (the default when piped)")
+    .option("--jsonl", "print one item per line as JSON, for scripts")
+    .option("--dry-run", "print the request without sending it")
+    .option("--code [lang]", "print the request as TypeScript and curl (or only ts, or curl) instead of sending it")
+    .action(async (opts: SplitFlags) => {
+      code = await split(ctx(), opts);
+    });
+
+  program
+    .command("extract")
+    .description("pull named fields out of a document, each value with a confidence")
+    .requiredOption(
+      "-f, --field <name=description>",
+      "a field and what it asks for, repeat for each (1 to 16)",
+      collect,
+    )
+    .option("--type <name=type>", "make a field come back as a date, duration or number, repeat for each", collect)
+    .option("-t, --text <text>", "the document")
+    .option("--file <path>", "read the document from a file (- for stdin)")
+    .option("--json", "print the full response as JSON (the default when piped)")
+    .option("--dry-run", "print the request without sending it")
+    .option("--code [lang]", "print the request as TypeScript and curl (or only ts, or curl) instead of sending it")
+    .action(async (opts: ExtractFlags) => {
+      code = await extract(ctx(), opts);
+    });
+
+  const listOptions = (command: Command): Command =>
+    command
+      .option("--limit <n>", "how many to show, 1 to 100", number)
+      .option("--after <id>", "start after this id, for the next page")
+      .option("--json", "print as JSON (the default when piped)");
+
+  const skills = program
+    .command("skills")
+    .description("make, teach and use saved skills (reading and managing them is free)");
+
+  listOptions(skills.command("list").description("list your skills, newest first")).action(async (opts: ListFlags) => {
+    code = await listSkills(ctx(), opts);
+  });
+
+  skills
+    .command("show")
+    .description("show one skill: its question or split, examples, status and quality")
+    .argument("<skill>", "the skill's name or id")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (name: string, opts: { json?: boolean }) => {
+      code = await showSkill(ctx(), name, opts);
+    });
+
+  skills
+    .command("add")
+    .description("make a skill from a YAML or JSON file (see README). Examples in it are billed")
+    .argument("<file>", "the skill: a name, and a question (decision skill) or a split (split skill)")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (path: string, opts: { json?: boolean }) => {
+      code = await addSkill(ctx(), path, opts);
+    });
+
+  skills
+    .command("edit")
+    .description("change a skill. A new question, parts or rule makes it learn again")
+    .argument("<skill>", "the skill's name or id")
+    .argument("[file]", "a YAML or JSON file with only the fields to change")
+    .option("--name <name>", "a new name")
+    .option("--description <text>", "a new description")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (name: string, path: string | undefined, opts: EditFlags) => {
+      code = await editSkill(ctx(), name, path, opts);
+    });
+
+  skills
+    .command("delete")
+    .description("delete a skill and its examples")
+    .argument("<skill>", "the skill's name or id")
+    .option("-y, --yes", "don't ask first (needed in scripts)")
+    .action(async (name: string, opts: { yes?: boolean }) => {
+      code = await deleteSkill(ctx(), name, opts);
+    });
+
+  skills
+    .command("try")
+    .description("ask a decision skill's question about a text (billed like any question)")
+    .argument("<skill>", "the skill's name or id")
+    .option("-t, --text <text>", "the text to judge")
+    .option("--file <path>", "read the text from a file (- for stdin)")
+    .option("--field <path>", "print one field of the answer, like noul, choice or skill.version")
+    .option("--json", "print the full response as JSON (the default when piped)")
+    .option("--dry-run", "print the request without sending it")
+    .option("--code [lang]", "print the request as TypeScript and curl (or only ts, or curl) instead of sending it")
+    .action(async (name: string, opts: TryFlags) => {
+      code = await trySkill(ctx(), name, opts);
+    });
+
+  const examples = skills.command("examples").description("teach a skill with labelled examples");
+
+  examples
+    .command("add")
+    .description("add examples from a YAML or JSON list (billed once, on their tokens)")
+    .argument("<skill>", "the skill's name or id")
+    .argument("<file>", "decision skills: {state, answer} each. Split skills: {text, items} or {text, starts}")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (name: string, path: string, opts: { json?: boolean }) => {
+      code = await addExamples(ctx(), name, path, opts);
+    });
+
+  listOptions(
+    examples
+      .command("list")
+      .description("list a skill's examples, newest first")
+      .argument("<skill>", "the skill's name or id"),
+  ).action(async (name: string, opts: ListFlags) => {
+    code = await listExamples(ctx(), name, opts);
+  });
+
+  examples
+    .command("delete")
+    .description("remove one example")
+    .argument("<skill>", "the skill's name or id")
+    .argument("<id>", "the example's id")
+    .option("-y, --yes", "don't ask first (needed in scripts)")
+    .action(async (name: string, id: string, opts: { yes?: boolean }) => {
+      code = await deleteExample(ctx(), name, id, opts);
+    });
+
+  const sessions = program
+    .command("sessions")
+    .description("keep a state on Wity's side, add to it as things happen, and decide on it");
+
+  listOptions(sessions.command("list").description("list your sessions, newest first")).action(
+    async (opts: ListFlags) => {
+      code = await listSessions(ctx(), opts);
+    },
+  );
+
+  sessions
+    .command("show")
+    .description("show one session: its state, skills and when it expires")
+    .argument("<id>", "the session's id")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      code = await showSession(ctx(), id, opts);
+    });
+
+  sessions
+    .command("add")
+    .description("start a session")
+    .option("-t, --text <text>", "the state Wity reads first (optional)")
+    .option("--file <path>", "read the state from a file (- for stdin)")
+    .option("--skill <name>", "a skill the session decides with, repeat for each", collect)
+    .option("--expires-in <time>", "delete it after this long, like 12h or 30d (default 7 days)")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (opts: AddSessionFlags) => {
+      code = await addSession(ctx(), opts);
+    });
+
+  sessions
+    .command("edit")
+    .description("change a session's skills or expiry. The state changes only through events")
+    .argument("<id>", "the session's id")
+    .option("--skill <name>", "the skills to decide with, repeat for each (replaces the list)", collect)
+    .option("--expires-in <time>", "delete it this long from now, like 12h or 30d")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (id: string, opts: { skill?: string[]; expiresIn?: string; json?: boolean }) => {
+      code = await editSession(ctx(), id, opts);
+    });
+
+  sessions
+    .command("delete")
+    .description("delete a session and its log")
+    .argument("<id>", "the session's id")
+    .option("-y, --yes", "don't ask first (needed in scripts)")
+    .action(async (id: string, opts: { yes?: boolean }) => {
+      code = await deleteSession(ctx(), id, opts);
+    });
+
+  sessions
+    .command("event")
+    .description("add what happened to a session, or correct an earlier decision (free)")
+    .argument("<id>", "the session's id")
+    .option("--update <text>", "add this to what Wity reads")
+    .option("--state <text>", "replace what Wity reads from here on")
+    .option("--note <text>", "keep this in the log. Decisions don't read it")
+    .option("--feedback <decision_id>", "correct this decision (use with --answer)")
+    .option("--answer <answer>", "the right answer: yes or no, or an option id")
+    .option("--question <name>", "which question, if the decision had more than one skill")
+    .option("--json", "print as JSON (the default when piped)")
+    .action(async (id: string, opts: EventFlags) => {
+      code = await addEvent(ctx(), id, opts);
+    });
+
+  sessions
+    .command("decide")
+    .description("decide on what the session holds now, with its skills or a questions file")
+    .argument("<id>", "the session's id")
+    .argument("[questions-file]", "questions like `wity ask` takes, without a state (default: the session's skills)")
+    .addOption(
+      new Option("-r, --reasoning <mode>", "when Wity thinks before answering (default off)").choices([
+        "off",
+        "auto",
+        "always",
+      ]),
+    )
+    .option("--remember", "add these answers to what later decisions read")
+    .option("--json", "print the full response as JSON (the default when piped)")
+    .action(async (id: string, path: string | undefined, opts: DecideFlags) => {
+      code = await decide(ctx(), id, path, opts);
+    });
+
+  listOptions(
+    sessions.command("log").description("show a session's events, oldest first").argument("<id>", "the session's id"),
+  ).action(async (id: string, opts: ListFlags) => {
+    code = await showLog(ctx(), id, opts);
+  });
 
   program
     .command("playground")

@@ -1,11 +1,15 @@
 // Reading what the person gives the CLI: the text to judge, and a key typed or piped in.
 
 import { readFile, stat } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { CliError, EXIT } from "./exit.ts";
 import type { Input, Io } from "./io.ts";
 
 /** Wity reads at most this many characters of state. From wity.alphanimble.com/docs/limits. */
 export const MAX_STATE_CHARS = 32_000;
+
+/** `split` and `extract` read longer documents, up to this many characters. */
+export const MAX_DOC_CHARS = 60_000;
 
 /** Stop reading input past this size. Far above what Wity accepts, and small enough to keep in memory. */
 const MAX_READ_BYTES = 4 * 1024 * 1024;
@@ -35,7 +39,7 @@ export interface StateFlags {
 }
 
 /** The text to judge: `--text`, `--file` (`-` is stdin), or piped in. Exactly one of them. */
-export const readState = async (flags: StateFlags, io: Io): Promise<string> => {
+export const readState = async (flags: StateFlags, io: Io, max: number = MAX_STATE_CHARS): Promise<string> => {
   if (flags.text !== undefined && flags.file !== undefined) {
     throw new CliError("Give the text with --text or --file, not both.", EXIT.usage);
   }
@@ -67,13 +71,47 @@ export const readState = async (flags: StateFlags, io: Io): Promise<string> => {
   if (text.trim() === "") throw new CliError("The text to judge is empty.", EXIT.usage);
   // Counted in characters, not UTF-16 units, so emoji count once.
   const length = Array.from(text).length;
-  if (length > MAX_STATE_CHARS) {
+  if (length > max) {
     throw new CliError(
-      `The text is ${length.toLocaleString("en")} characters. Wity reads at most ${MAX_STATE_CHARS.toLocaleString("en")}.`,
+      `The text is ${length.toLocaleString("en")} characters. Wity reads at most ${max.toLocaleString("en")}.`,
       EXIT.usage,
     );
   }
   return text;
+};
+
+/**
+ * Ask a yes-or-no question on the terminal. Only "y" or "yes" is a yes. Ctrl+C cancels.
+ * The question goes to stderr, so stdout stays clean.
+ */
+export const confirm = (io: Io, question: string): Promise<boolean> => {
+  io.stderr.write(`  ${question} [y/N] `);
+  const lines = createInterface({ input: io.stdin });
+  return new Promise((resolve, reject) => {
+    const finish = (answer: boolean | Error) => {
+      lines.removeAllListeners();
+      lines.close();
+      io.signal.removeEventListener("abort", onAbort);
+      if (answer instanceof Error) reject(answer);
+      else resolve(answer);
+    };
+    const onAbort = () => finish(new CliError("Cancelled.", EXIT.cancelled));
+    lines.once("line", (line) => finish(/^y(es)?$/i.test(line.trim())));
+    lines.once("close", () => finish(false));
+    io.signal.addEventListener("abort", onAbort, { once: true });
+  });
+};
+
+/**
+ * Before deleting: `--yes` goes ahead. On a terminal, ask. Anywhere else, refuse, so a script never deletes by accident.
+ * Returns false when the person says no.
+ */
+export const confirmDelete = async (io: Io, what: string, yes: boolean | undefined): Promise<boolean> => {
+  if (yes) return true;
+  if (!io.stdin.isTTY) {
+    throw new CliError(`Deleting ${what} needs --yes when there's no terminal to ask.`, EXIT.usage);
+  }
+  return confirm(io, `Delete ${what}? This can't be undone.`);
 };
 
 /**

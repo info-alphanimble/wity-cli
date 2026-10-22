@@ -1,7 +1,15 @@
 // --code: the same request as TypeScript (with the SDK) and as curl, to copy into your own project.
 // The key is always $WITY_API_KEY in the output, never the real one.
 
-import { DEFAULT_BASE_URL, type GenerateRequest, type Question, type SystemOneRequest } from "wity-sdk";
+import {
+  DEFAULT_BASE_URL,
+  type ExtractRequest,
+  type GenerateRequest,
+  type Question,
+  type SkillQuestion,
+  type SplitRequest,
+  type SystemOneRequest,
+} from "wity-sdk";
 import type { Ctx } from "./context.ts";
 import { CliError, EXIT } from "./exit.ts";
 
@@ -21,7 +29,11 @@ const literal = (value: unknown, indent: string): string =>
     .join("\n")
     .replace(/^(\s*)"([A-Za-z_$][\w$]*)":/gm, "$1$2:");
 
-const builder = (question: Question, indent: string): string => {
+/** The SDK helper a question is built with: noul, choice, score or skill. */
+const helperName = (question: Question | SkillQuestion): string => ("skill" in question ? "skill" : question.type);
+
+const builder = (question: Question | SkillQuestion, indent: string): string => {
+  if ("skill" in question) return `skill(${str(question.skill)})`;
   if (question.type === "noul") {
     return question.criteria
       ? `noul(${str(question.instructions)}, ${literal(question.criteria, indent)})`
@@ -46,7 +58,7 @@ const clientLine = (baseURL: string): string =>
     : `const client = new WityClient({ baseURL: ${str(baseURL)} }); // reads WITY_API_KEY`;
 
 export const systemOneTs = (request: SystemOneRequest, baseURL: string): string => {
-  const types = [...new Set(Object.values(request.questions).map((q) => q.type))].sort();
+  const types = [...new Set(Object.values(request.questions).map(helperName))].sort();
   const questions = Object.entries(request.questions)
     .map(([name, question]) => `    ${prop(name)}: ${builder(question, "    ")},`)
     .join("\n");
@@ -55,7 +67,8 @@ export const systemOneTs = (request: SystemOneRequest, baseURL: string): string 
     request.max_latency_ms !== undefined && `  max_latency_ms: ${request.max_latency_ms},`,
   ].filter(Boolean);
   const first = Object.entries(request.questions)[0];
-  const field = first?.[1].type === "noul" ? "noul" : first?.[1].type === "choice" ? "choice" : "score";
+  // A skill answers with a noul or a choice, so its whole answer is printed.
+  const field = first && helperName(first[1]) !== "skill" ? `.${helperName(first[1])}` : "";
   return [
     `import { WityClient, ${types.join(", ")} } from "wity-sdk";`,
     "",
@@ -69,7 +82,7 @@ export const systemOneTs = (request: SystemOneRequest, baseURL: string): string 
     ...extras,
     "});",
     "",
-    first ? `console.log(res.answers.${prop(first[0])}.${field});` : "console.log(res.answers);",
+    first ? `console.log(res.answers.${prop(first[0])}${field});` : "console.log(res.answers);",
   ].join("\n");
 };
 
@@ -92,6 +105,24 @@ export const generateTs = (request: GenerateRequest, baseURL: string): string =>
     request.shape !== undefined ? "console.log(res.value);" : "console.log(res.text);",
   ].join("\n");
 };
+
+/** `split` and `extract` take a plain object, so the request is written as it is. */
+const plainTs = (method: string, request: object, baseURL: string, print: string): string =>
+  [
+    `import { WityClient } from "wity-sdk";`,
+    "",
+    clientLine(baseURL),
+    "",
+    `const res = await client.${method}(${literal(request, "")});`,
+    "",
+    print,
+  ].join("\n");
+
+export const splitTs = (request: SplitRequest, baseURL: string): string =>
+  plainTs("split", request, baseURL, "for (const item of res.items) console.log(item.start, item.end, item.text);");
+
+export const extractTs = (request: ExtractRequest, baseURL: string): string =>
+  plainTs("extract", request, baseURL, "console.log(res.fields);");
 
 /**
  * A curl command. The body goes in a quoted heredoc, so the shell never expands anything in it.
