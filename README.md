@@ -290,6 +290,9 @@ fi
 | `WITY_CREDENTIAL_STORE` | `auto` (default), `keychain` or `file`. |
 | `WITY_LOG_LEVEL` | `debug`, `info`, `warn` (default), `error` or `off`. Logs go to stderr. They never include the key or your text. |
 | `NO_COLOR`, `FORCE_COLOR` | Turn colours off or on. |
+| `WITY_NO_UPDATE_CHECK` | Set to `1` to stop the update notice. |
+
+When a newer `wity-cli` is out, `wity` says so on stderr after a command, at most once a day. It asks npm at most once a day, in the background, so no command waits for it. It stays quiet in CI, when output is piped, and in `wity mcp serve`.
 
 ## Developing
 

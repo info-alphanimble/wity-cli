@@ -2,6 +2,16 @@
 
 All notable changes to `wity-cli`. Versions follow [semver](https://semver.org). Before 1.0, a minor version can add features.
 
+## 0.2.1 (2026-10-26)
+
+### Added
+
+- **Update notice.** When a newer `wity-cli` is on npm, `wity` says so on stderr after a command, at most once a day. It asks npm at most once a day, in the background, so no command waits for it. It stays quiet in CI, when output is piped, and in `wity mcp serve`. `WITY_NO_UPDATE_CHECK=1` turns it off.
+
+### Changed
+
+- Dependency updates for security fixes: `body-parser` 2.4.0, `fast-uri` 3.1.9, `ip-address` 10.7.5, `qs` 6.16.1 and `zod` 4.6.7.
+
 ## 0.2.0 (2026-10-22)
 
 Split documents, extract fields, and teach Wity with skills and sessions.
